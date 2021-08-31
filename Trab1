@@ -1,0 +1,180 @@
+#include<stdio.h>
+#include<pthread.h>
+#include<stdlib.h>
+#include<time.h>
+#include<math.h>
+
+/*Nome:Lucas Miranda Capris             Dre:116161776
+  Nome:Víctor Constâncio de Azevedo     Dre:116158472*/
+
+int nthreads;  //Número de threads
+double *x; //Vetor que armazena os x informados
+double *y; //Vetor que armazena os y informados
+int n; //Número de termos de x e y
+double *l; //resultados de lagrange das threads
+double xf; //x final
+
+void *lagrange (void*arg){  //Função a ser executada pelas threads 
+    int id = (int) arg;   //Identificador das threads
+    // num e den serão utilizados para representar o numerador e denominador do fórmula utilizada
+    double num;   
+    double den;
+    for(int j=id;j<n;j+=nthreads){
+        num=1;
+        den=1;
+        for(int i=0;i<n;i++){
+            if(j==i){
+                continue;
+            }
+            num=num*(xf-x[i]);
+        }
+        for(int i=0;i<n;i++){
+            if(j==i){
+                continue;
+            }
+            den=den*(x[j]-x[i]);
+        }
+        l[j]=y[j]*(num/den);
+    }
+    pthread_exit(NULL);
+}
+
+int main(int argc, char *argv[]){
+    
+    //Declarando as variáveis;
+    srand(time(NULL));
+    double dif=0; //Variável utilizada para calcular o tempo gasto em diversas etapas diferentes
+    clock_t timeIn , timeOut;
+    pthread_t *tid;
+    double rs=0 , rt=0; //resposta final calculada sequencialmente e pelas threads respectivamente
+    
+    //Corrigindo possíveis erros colocados na entrada
+    
+    if(argc<4){
+        fprintf(stderr,"A entrada deve ser: ./<nome do programa> <quantidade de termos de x e y> <valor de x da qual se deseja a estimativa> <numero de threads>\n");
+        return 1;
+    }
+
+    //Corrigindo número de threads maior do o número de x ou y
+    
+    if(nthreads>n){
+        nthreads=n;
+    }
+
+    //Armazenando os valores dados como entrada
+    
+    n=atoi(argv[1]);
+    xf=atof(argv[2]);  
+    xf = (double)xf;        
+    nthreads=atoi(argv[3]);
+
+    //Alocando memória
+    
+    x = (double*) malloc(sizeof(double)*n);
+    if(x==NULL){
+        fprintf(stderr,"Erro--malloc\n");
+        return 2;
+    }
+
+    y = (double*) malloc(sizeof(double)*n);
+    if(y==NULL){
+        fprintf(stderr,"Erro--malloc\n");
+        return 2;
+    }
+
+    l = (double*) malloc(sizeof(double)*n);
+    if(l==NULL){
+        fprintf(stderr,"Erro--malloc\n");
+        return 2;
+    }
+
+    //Tomando os valores de x e y do usuário
+
+    for(int i=0;i<n;i++){
+        printf("digite x%d: \n",i);
+        scanf("%lf", &x[i]);
+        x[i]=i+1; //Utilizado caso queiramos fazer algum teste com diversos valores de x evitando inputs
+    }
+
+    for(int i=0;i<n;i++){
+        printf("digite y%d: \n",i);
+        scanf("%lf", &y[i]);
+        //y[i]= (i+1)*(i+1); //Utilizado caso queiramos fazer algum teste com divertsos valores de y evitando inputs
+    }
+
+    //Calculando Lagrange de maneira sequencial
+    
+    timeIn=clock();
+    for(int j=0;j<n;j++){
+        double num=1;
+        double den=1;
+        for(int i=0;i<n;i++){
+            if(j==i){
+                continue;
+            }
+            num=num*(xf-x[i]);
+        }
+        for(int i=0;i<n;i++){
+            if(j==i){
+                continue;
+            }
+            den=den*(x[j]-x[i]);
+        }
+        rs+=y[j]*(num/den);
+    }
+    timeOut=clock();
+    dif=(double)(timeOut-timeIn)/CLOCKS_PER_SEC;
+    printf("O tempo em s levado para parte sequencial foi %.10lf\n",dif);
+
+    //Alocando memória referente as threads
+    
+    tid = (pthread_t*)malloc(sizeof(pthread_t) * nthreads);
+    if(tid==NULL){
+        fprintf(stderr,"Erro-malloc\n");
+        return 2;
+    }
+
+    //Criando as threads
+    
+    for(long int i = 0; i < nthreads; i++){
+        if(pthread_create(tid+i, NULL, lagrange,(void*) i)){
+            fprintf(stderr,"Erro--pthread_create\n");
+            return 3;
+        }
+    }
+    
+    //Aguardando término das threads e encontrando os valores mínimo e máximo dentre os resultados de cada thread
+    
+    for(long int i=0;i<nthreads;i++){
+        pthread_join(*(tid+i),NULL);
+    }
+    for(int i=0;i<n;i++){
+        rt+=l[i];
+    }
+    timeOut=clock();
+    dif=(double)(timeOut-timeIn)/CLOCKS_PER_SEC;
+    printf("O tempo em s levado para parte concorrente foi %.10lf\n",dif);
+
+    //Checando a corretude do programa comparando a versão sequencial e concorrente
+    //Arredondando os resultados obtidos para 4 casas decimais
+    rt = roundf(rt*10000)/10000;
+    rs = roundf(rs*10000)/10000;
+
+    if(rt==rs){
+        printf("Resultados sequencial e concorrente equivalentes\n");
+    }
+    else{
+        printf("Resultados incompativeis\n");
+    }
+
+    //Mostrando o resultado
+    
+    printf("O valor encontrado foi: %lf %lf\n",rt,rs);
+    
+    //Liberando o espaço de memória
+    free(x);
+    free(y);
+    free(l);
+    free(tid);
+    return 0;
+}
